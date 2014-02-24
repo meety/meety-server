@@ -15,6 +15,12 @@ def index():
 	response.headers["Content-Type"] = "application/json"
 	return response
 
+@server.route('/commn')
+def commn_status():
+
+	response = make_response(json.dumps({'commn':dict(commn)}), 200)
+	response.headers["Content-Type"] = "application/json"
+	return response
 
 # XMPP Client
 
@@ -39,10 +45,11 @@ def start_xmpp_client(commn):
 					'message_type': 'ack',
 					'message_id': msg['message_id']})
 				if msg.has_key('from'):
-					send_queue.
-					append({'to': msg['from'],
+					send_queue.append({
+						'to': msg['from'],
 						'message_id': random_id(),
-						'data': {'pong': 1}})
+						'data': {'pong': 1}
+					})
 #			elif ( msg['message_type'] == 'ack' 
 #			or msg['message_type'] == 'nack'):
 #				pass
@@ -67,8 +74,11 @@ def start_xmpp_client(commn):
 
 
 	client = xmpp.Client('gcm.googleapis.com', debug=['socket'])
-	client.connect(server=(SERVER, PORT), secure=1, use_srv=False)
-	auth = client.auth(USERNAME, PASSWORD)
+	client.connect(server=(server.config['SERVER'],
+				server.config['PORT']),
+				secure=1, use_srv=False)
+	auth = client.auth(server.config['USERNAME'],
+				server.config['PASSWORD'])
 	if not auth:
 		commn['status'] = -1
 		commn['description'] = 'xmpp client authentication failed'
@@ -96,7 +106,7 @@ if __name__ == "__main__":
 	commn['status'] = 0
 	commn['description'] = 'about to start'
 
-	xmpp_client_process = Process(target=start_xmpp_client, args=(commn))
+	xmpp_client_process = Process(target=start_xmpp_client, args=(commn,))
 	xmpp_client_process.daemon = True
 	xmpp_client_process.start()
 
