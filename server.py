@@ -2,6 +2,7 @@ import os, sys, json, xmpp, random, string
 from flask import Flask, make_response
 
 server = Flask(__name__)
+server.config.from_object("config.DevelopmentConfig")
 
 @server.route('/')
 def index():
@@ -11,5 +12,5 @@ def index():
 
 if __name__ == "__main__":
 
-	port = int(os.environ.get("PORT", 5000))
+	port = int(os.environ.get("PORT", 80))
 	server.run(host="0.0.0.0", port=port, debug=True)	
