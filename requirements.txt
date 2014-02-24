@@ -3,4 +3,4 @@ Jinja2==2.7.1
 Werkzeug==0.9.4
 distribute==0.6.37
 dnspython==1.11.1
-http://sourceforge.net/projects/xmpppy/files/xmpppy/0.5.0-rc1
+http://sourceforge.net/projects/xmpppy/files/xmpppy/0.5.0-rc1/xmpppy-0.5.0rc1.tar.gz
