@@ -1,13 +1,14 @@
-import os, sys, json, xmpp, random, string
+import os, sys, json, xmpp, random, string, base64
 from flask import Flask, make_response, request
-from flask.ext.login import LoginManager
+from flask.ext.login import LoginManager, login_user, logout_user, login_required, current_user
 from multiprocessing import Process, Manager
+from users import User
 
 app = Flask(__name__)
 app.config.from_object("config.DevelopmentConfig")
+app.secret_key = os.urandom(24)
 
 login_manager = LoginManager(app)
-
 
 # HTTP Endpoints
 # Communication to the server
@@ -27,27 +28,96 @@ def commn_status():
 	return response
 
 @login_manager.user_loader
-def load_user(userid):
-	pass
-	#loads the user
+def load_user(username):
+	return User.get(username)
+
+@login_manager.unauthorized_handler
+def unauthorized():
+	response = make_response(json.dumps({'error':'unauthorized'}), 401)
+	response.headers["Content-Type"] = "application/json"
+	return response
+
+@app.route('/register', methods=['POST'])
+def register():
+
+	data = request.json
+
+	if ( data == None ):
+		response = make_response(json.dumps({'register':'malformed'}), 400)
+		response.headers["Content-Type"] = "application/json"
+		return response
+	else:
+		data = dict(data)
+		username = data.get('username', None)
+		password = data.get('password', None)
+
+	if ( username == None or password == None ):
+		response = make_response(json.dumps({'register':'malformed'}), 400)
+		response.headers["Content-Type"] = "application/json"
+		return response
+
+	elif ( User.get(username) != None ):
+		response = make_response(json.dumps({'error':'username taken'}), 403)
+		response.headers["Content-Type"] = "application/json"
+		return response
+
+	else:
+		try:
+			User(username, password)
+			response = make_response(json.dumps({'register':'success'}), 200)
+		except:
+			response = make_response(json.dumps({'register':'fail'}), 500)
+		response.headers["Content-Type"] = "application/json"
+		return response
 
 @app.route('/login', methods=['POST'])
 def login():
 
-	auth = request.headers['Authorization']	
-	if auth.startswith("Basic "):
-		auth.replace("Basic ", "", 1)
-	auth = base64.b64decode(auth)
-	username, password = auth.split(":")
-	#check credentials
-	#log user in if auth is provided
+	try:
+		auth = request.headers['Authorization']	
+		if auth.startswith("Basic "):
+			auth = auth.replace("Basic ", "", 1).strip()
+		auth = base64.b64decode(auth)
+		username, password = auth.split(":")
+	except:
+		response = make_response(json.dumps({'error':'malformed'}),
+							400)
+		response.headers["Content-Type"] = "application/json"
+		return response
 
+	if User.auth(username, password):
+		if login_user(User.get(username)):
+			response = make_response(json.dumps({'login':'success'}), 200)
+		else:
+			response = make_response(json.dumps({'login':'fail'}), 500)
+	else:
+		response = make_response(json.dumps({'error':'unauthorized'}), 401)
 
+	response.headers["Content-Type"] = "application/json"
+	return response
+
+@app.route('/logged', methods=['GET'])
+def logged():
+
+	json_response = {'status':'nobody is logged'}
+
+	if current_user.is_authenticated():
+		json_response['status'] = "%s is logged" % (current_user.uid)
+
+	response = make_response(json.dumps(json_response), 200)
+	response.headers["Content-Type"] = "application/json"
+	return response
+	
 @app.route('/logout', methods=['POST'])
 @login_required
 def logout():
-	pass
-	#logs the user out
+	if logout_user():
+		response = make_response(json.dumps({'logout':'success'}), 200)
+	else:
+		response = make_response(json.dumps({'logout':'fail'}), 500)
+
+	response.headers["Content-Type"] = "application/json"
+	return response
 
 # XMPP Client
 
@@ -105,7 +175,7 @@ def start_xmpp_client(commn):
 			unacked_messages_quota -= 1
 
 	client = xmpp.Client(app.config['SERVER'], debug=['socket'])
-	client.connect(app=(app.config['SERVER'],
+	client.connect(server=(app.config['SERVER'],
 				app.config['PORT']),
 				secure=1, use_srv=False)
 	auth = client.auth(app.config['USERNAME'],
