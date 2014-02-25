@@ -1,7 +1,8 @@
-import os, sys, json, xmpp, random, string, base64
+import os, json, base64
 from flask import Flask, make_response, request
 from flask.ext.login import LoginManager, login_user, logout_user, login_required, current_user
 from multiprocessing import Process, Manager
+from xmpp_client import start_xmpp_client
 from users import User
 
 app = Flask(__name__)
@@ -23,7 +24,12 @@ def index():
 @app.route('/commn')
 def commn_status():
 
-	response = make_response(json.dumps({'commn':dict(commn)}), 200)
+	commn_status = {
+			'status' : commn['status'],
+			'description' : commn['description']
+	}
+
+	response = make_response(json.dumps({'commn':commn_status}), 200)
 	response.headers["Content-Type"] = "application/json"
 	return response
 
@@ -40,9 +46,11 @@ def unauthorized():
 @app.route('/register', methods=['POST'])
 def register():
 
-	data = request.json
-
-	if ( data == None ):
+	try:
+		data = request.json
+		if ( data == None ):
+			raise Exception()
+	except:
 		response = make_response(json.dumps({'register':'malformed'}), 400)
 		response.headers["Content-Type"] = "application/json"
 		return response
@@ -119,97 +127,15 @@ def logout():
 	response.headers["Content-Type"] = "application/json"
 	return response
 
-# XMPP Client
-
-def random_id():
-	rid = ''
-	for x in range(8):
-		rid += random.choice(string.ascii_letters + string.digits)
-	return rid
-
-def start_xmpp_client(commn):
-
-	def callback_function_I(session, message):
-
-		global unacked_messages_quota
-
-		gcm = message.getTags('gcm')
-
-		if gcm:
-			gcm_json = gcm[0].getData()
-			msg = json.loads(gcm_json)
-			if not msg_has_key('message_type'):
-				#can send response back here
-				send({'to': msg['from'],
-					'message_type': 'ack',
-					'message_id': msg['message_id']})
-				if msg.has_key('from'):
-					send_queue.append({
-						'to': msg['from'],
-						'message_id': random_id(),
-						'data': {'pong': 1}
-					})
-			elif ( msg['message_type'] == 'ack' 
-			or msg['message_type'] == 'nack'):
-				unacked_messages_quota += 1
-
-	def send(client, json_dict):
-
-		template = (
-		"""<message>
-			<gcm xmlns='google:mobile:data'>
-				{1}
-			</gcm>
-		</message>""")
-
-		client.send(xmpp.protocol.
-			Message(node=template.format(client.Bind.bound[0],
-				json.dumps(json_dict))))
-
-	def flush_queued_messages():
-
-		global unacked_messages_quota
-
-		while len(send_queue) and unacked_messages_quota > 0:
-			send(send_queue.pop(0))
-			unacked_messages_quota -= 1
-
-	client = xmpp.Client(app.config['SERVER'], debug=['socket'])
-	client.connect(server=(app.config['SERVER'],
-				app.config['PORT']),
-				secure=1, use_srv=False)
-	auth = client.auth(app.config['USERNAME'],
-				app.config['PASSWORD'])
-
-	if not auth:
-		commn['status'] = -1
-		commn['description'] = 'xmpp client authentication failed'
-		sys.exit(1)
-
-	unacked_messages_quota = 1000
-	send_queue = []
-
-#	client.RegisterHandler('event1', callback_function)
-#	client.RegisterHandler('event2', callback_function_2)
-#	client.RegisterHandler('event3', callback_function_3)
-#	...
-	client.RegisterHandler('eventI', callback_function_I)
-#	...
-#	client.RegisterHandler('eventN', callback_function_N)
-
-	commn['status'] = 1
-	commn['description'] = 'xmpp client running'
-
-	while True:
-		client.Process(1)
-		flush_queued_messages()
-
-
 if __name__ == "__main__":
 
 	commn = Manager().dict()
 	commn['status'] = 0
 	commn['description'] = 'about to start'
+	commn['server'] = app.config['SERVER']
+	commn['port'] = app.config['PORT']
+	commn['gcm_username'] = app.config['USERNAME']
+	commn['gcm_password'] = app.config['PASSWORD']
 
 	xmpp_client_process = Process(target=start_xmpp_client, args=(commn,))
 	xmpp_client_process.daemon = True
