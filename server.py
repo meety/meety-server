@@ -1,26 +1,53 @@
 import os, sys, json, xmpp, random, string
-from flask import Flask, make_response
+from flask import Flask, make_response, request
+from flask.ext.login import LoginManager
 from multiprocessing import Process, Manager
 
-server = Flask(__name__)
-server.config.from_object("config.DevelopmentConfig")
+app = Flask(__name__)
+app.config.from_object("config.DevelopmentConfig")
+
+login_manager = LoginManager(app)
+
 
 # HTTP Endpoints
 # Communication to the server
 
-@server.route('/')
+@app.route('/')
 def index():
 
 	response = make_response(json.dumps({'message':'ok'}), 200)
 	response.headers["Content-Type"] = "application/json"
 	return response
 
-@server.route('/commn')
+@app.route('/commn')
 def commn_status():
 
 	response = make_response(json.dumps({'commn':dict(commn)}), 200)
 	response.headers["Content-Type"] = "application/json"
 	return response
+
+@login_manager.user_loader
+def load_user(userid):
+	pass
+	#loads the user
+
+@app.route('/login', methods=['POST'])
+def login():
+
+	auth = request.headers['Authorization']	
+	if auth.startswith("Basic "):
+		auth.replace("Basic ", "", 1)
+	auth = base64.b64decode(auth)
+	username, password = auth.split(":")
+	#check credentials
+	#log user in if auth is provided
+
+
+@app.route('/logout', methods=['POST'])
+@login_required
+def logout():
+	pass
+	#logs the user out
 
 # XMPP Client
 
@@ -77,12 +104,12 @@ def start_xmpp_client(commn):
 			send(send_queue.pop(0))
 			unacked_messages_quota -= 1
 
-	client = xmpp.Client(server.config['SERVER'], debug=['socket'])
-	client.connect(server=(server.config['SERVER'],
-				server.config['PORT']),
+	client = xmpp.Client(app.config['SERVER'], debug=['socket'])
+	client.connect(app=(app.config['SERVER'],
+				app.config['PORT']),
 				secure=1, use_srv=False)
-	auth = client.auth(server.config['USERNAME'],
-				server.config['PASSWORD'])
+	auth = client.auth(app.config['USERNAME'],
+				app.config['PASSWORD'])
 
 	if not auth:
 		commn['status'] = -1
@@ -107,6 +134,7 @@ def start_xmpp_client(commn):
 		client.Process(1)
 		flush_queued_messages()
 
+
 if __name__ == "__main__":
 
 	commn = Manager().dict()
@@ -118,4 +146,4 @@ if __name__ == "__main__":
 	xmpp_client_process.start()
 
 	port = int(os.environ.get("PORT", 5000))
-	server.run(host="0.0.0.0", port=port)
+	app.run(host="0.0.0.0", port=port)
