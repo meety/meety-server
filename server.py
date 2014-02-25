@@ -34,6 +34,8 @@ def start_xmpp_client(commn):
 
 	def callback_function_I(session, message):
 
+		global unacked_messages_quota
+
 		gcm = message.getTags('gcm')
 
 		if gcm:
@@ -50,9 +52,9 @@ def start_xmpp_client(commn):
 						'message_id': random_id(),
 						'data': {'pong': 1}
 					})
-#			elif ( msg['message_type'] == 'ack' 
-#			or msg['message_type'] == 'nack'):
-#				pass
+			elif ( msg['message_type'] == 'ack' 
+			or msg['message_type'] == 'nack'):
+				unacked_messages_quota += 1
 
 	def send(client, json_dict):
 
@@ -69,16 +71,19 @@ def start_xmpp_client(commn):
 
 	def flush_queued_messages():
 
-		while len(send_queue):
+		global unacked_messages_quota
+
+		while len(send_queue) and unacked_messages_quota > 0:
 			send(send_queue.pop(0))
+			unacked_messages_quota -= 1
 
-
-	client = xmpp.Client('gcm.googleapis.com', debug=['socket'])
+	client = xmpp.Client(server.config['SERVER'], debug=['socket'])
 	client.connect(server=(server.config['SERVER'],
 				server.config['PORT']),
 				secure=1, use_srv=False)
 	auth = client.auth(server.config['USERNAME'],
 				server.config['PASSWORD'])
+
 	if not auth:
 		commn['status'] = -1
 		commn['description'] = 'xmpp client authentication failed'
@@ -93,8 +98,10 @@ def start_xmpp_client(commn):
 #	...
 	client.RegisterHandler('eventI', callback_function_I)
 #	...
-#	client.RegisterHandler('event', callback_function_N)
+#	client.RegisterHandler('eventN', callback_function_N)
 
+	commn['status'] = 1
+	commn['description'] = 'xmpp client running'
 
 	while True:
 		client.Process(1)

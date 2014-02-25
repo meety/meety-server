@@ -1,4 +1,4 @@
 meety-server
 ============
 
-meety Server is a XMPP component
+meety Server is meant to support GCM
